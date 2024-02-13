@@ -1,0 +1,157 @@
+---
+title: "Assignment 1"
+author: "Juan Gelvez"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Setup
+
+```{r results='hide', message=FALSE, warning=FALSE}
+library(titanic)
+library(caret)
+library(pROC)
+library(PRROC)
+```
+
+## Data
+
+In this notebook we use the Titanic data that is used on Kaggle (https://www.kaggle.com) as an introductory competition for getting familiar with machine learning. It includes information on a set of Titanic passengers, such as age, sex, ticket class and whether he or she survived the Titanic tragedy.
+
+Source: https://www.kaggle.com/c/titanic/data
+
+```{r}
+titanic <- titanic_train
+str(titanic)
+```
+
+We begin with some minor data preparations. The `lapply()` function is a handy tool if the task is to apply the same transformation (e.g. `as.factor()`) to multiple columns of a data frame.
+
+```{r}
+titanic[, c(2:3,5,12)] <- lapply(titanic[, c(2:3,5,12)], as.factor)
+```
+
+The `age` variable has some NAs, as a quick and dirty solution we can create a categorized age variable with NAs as an additional factor level.
+
+```{r}
+titanic$Age_c <- cut(titanic$Age, 5)
+titanic$Age_c <- addNA(titanic$Age_c)
+summary(titanic$Age_c)
+```
+
+## Train and test set
+
+Next we split the data into a training (80%) and a test (20%) part. This can be done by random sampling with `sample()`.
+
+```{r}
+set.seed(9395)
+
+train <- sample(1:nrow(titanic), 0.8*nrow(titanic))
+c_train <- titanic[train,]
+c_test <- titanic[-train,]
+
+```
+
+## Logistic regression
+
+In this exercise we simply use logistic regression as our prediction method, since we want to focus on the evaluation part. Build a first logit model with `Survived` as the outcome and `Pclass`, `Sex`, `Age_c`, `Fare` and `Embarked` as features.
+
+```{r}
+logit <- glm(Survived ~ Pclass + Sex + Age_c+Fare+Embarked, data = c_train, family = binomial)
+```
+
+A preliminary analysis of the logit model coefficients indicates a negative correlation between being in class 2 or 3 and the likelihood of surviving compared to being in class 1, suggesting lower survival rates for passengers in the lower classes. Additionally, the coefficients suggest that males have a lower survival probability compared to females. Furthermore, younger passengers appear to have a lower likelihood of survival compared to other age groups.
+
+```{r}
+summary(logit)
+```
+
+Now, build an additional logit model that uses the same features, but includes an interaction between class and sex. 
+
+```{r}
+logit_interactions <- glm(Survived ~ Pclass*Sex + Age_c+Fare+Embarked, data = c_train, family = binomial)
+summary(logit_interactions)
+```
+Expanding the initial analysis, the previous logit model was constructed incorporating the same predictors but additionally including an interaction term between class and sex. This model revealed a different pattern: it was found that the interaction between being male and passenger class is significantly and positively correlated with survival chances. This indicates that males in higher classes have a notably higher probability of surviving compared to their counterparts in lower classes. 
+
+
+## Prediction in test set
+
+Given both logit objects, we can generate predicted risk scores/ predicted probabilities of `Survived` in the test set.
+
+```{r}
+predicted_probs_logit <- predict(logit, newdata = c_test, type = "response")
+summary(predicted_probs_logit)
+ypredicted_probs_logit <- as.factor(ifelse(predicted_probs_logit > 0.5, "TRUE", "FALSE"))
+
+predicted_probs_logit_interactions <- predict(logit_interactions, newdata = c_test, type = "response")
+summary(predicted_probs_logit_interactions)
+ypredicted_probs_logit_interactions <- as.factor(ifelse(predicted_probs_logit_interactions > 0.5, "TRUE", "FALSE"))
+```
+
+It is often useful to first get an idea of prediction performance independent of specific classification thresholds. Use the `pROC` (or `PRROC`) package to create roc objects for both risk score vectors.
+
+```{r}
+true_status <- (c_test$Survived)
+roc_logit <- roc(response = true_status, predictor = predicted_probs_logit)
+roc_logit_interactions <- roc(response = true_status, predictor = predicted_probs_logit_interactions)
+
+
+```
+
+Now, you can print and plot the resulting `roc` objects.
+
+```{r}
+
+# Plot the ROC curve for the logit model
+plot(roc_logit, main="ROC Curves Comparison", col="blue", xlim=c(0,1), ylim=c(0,1), xlab="1 - Specificity (False Positive Rate)", ylab="Sensitivity (True Positive Rate)")
+lines(roc_logit_interactions, col="red")
+legend("bottomright", legend=c("Logit Model", "Logit with Interactions Model"), col=c("blue", "red"), lwd=2)
+
+auc_logit <- auc(roc_logit)
+auc_logit
+auc_logit_interactions <- auc(roc_logit_interactions)
+auc_logit_interactions
+
+```
+Both curves (Logit Model in blue and Logit with Interactions Model in red) start at the point (0,0), which is expected as this represents a threshold of 1 where no positive cases are predicted. They end at the point (1,1), representing a threshold of 0 where all cases are predicted as positive. The curves follow a similar trajectory, which suggests that both models have a comparable ability to discriminate between the positive (Survived) and negative (Did Not Survive) cases over most thresholds.There is a portion where the red curve (Logit with Interactions Model) is above the blue curve (Logit Model), which may suggest that in certain threshold ranges, the model with interactions is better at discriminating between the two classes than the model without interactions.
+
+With AUC scores of 0.8164 for the first logit model and 0.8213 for the second logit model with interactions, both models are showing good predictive ability, as both scores are substantially higher than 0.5. The logit model with interactions (AUC = 0.8213) performs slightly better than the logit model without interactions (AUC = 0.8164).
+
+#### end
+
+As a next step, we want to predict class membership given the risk scores of our two models. Here we use the default classification threshold, 0.5.
+
+```{r}
+predicted_classes_logit <- ifelse(predicted_probs_logit >= 0.5, "TRUE", "FALSE")
+predicted_classes_logit_interactions <- ifelse(predicted_probs_logit_interactions >= 0.5, "TRUE", "FALSE")
+```
+
+On this basis, we can use `confusionMatrix()` to get some performance measures for the predicted classes.
+
+```{r}
+# Ensure the true status is a factor with appropriate levels
+true_status_factor <- factor(ifelse(true_status == 0, "FALSE", "TRUE"))
+
+predicted_classes_logit_factor <- factor(predicted_classes_logit, levels = c("FALSE", "TRUE"))
+predicted_classes_logit_interactions_factor <- factor(predicted_classes_logit_interactions, levels = c("FALSE", "TRUE"))
+confusionMatrix(predicted_classes_logit_factor, true_status_factor)
+confusionMatrix(predicted_classes_logit_interactions_factor, true_status_factor)
+```
+
+Analyzing the metrics of the two logistic regression models, the model with interactions exhibits a slightly higher overall accuracy (80.45% vs. 79.89%) and sensitivity (92.92% vs. 86.73%), suggesting it is better at correctly identifying negative cases ('FALSE' as in non-survivors). However, this comes at the cost of reduced specificity (59.09% vs. 68.18%), meaning the model without interactions is more accurate in identifying positive cases ('TRUE' as in survivors). The choice between the two models would depend on the relative importance of avoiding false negatives (potentially overlooking survivors) versus false positives (incorrectly identifying non-survivors as survivors), with the interaction model being preferable in scenarios where the last one is prioritized.
+
+
+Measuring prediction performance with confusion matrices and related statistics can have limitations. First, these metrics are threshold-dependent; a fixed probability cutoff, typically 0.5, may not be the optimal threshold for all contexts. Also, metrics like accuracy can be bias by when one class outnumbers the other, a model might appear accurate simply by favoring the majority class, masking hard to predict the minority class effectively. Likewise, these metrics assume equal cost for false positives and false negatives, which is rarely the case in real-world applications. In many scenarios, the cost of one type of error can be much higher than the other, and performance metrics should be weighted accordingly. Lastly, the performance on the test set may not generalize to new data if the model has overfit the training data or if the test data is not representative of the broader population, limiting the practical applicability of the model.
+
+
+
+
+
+
+
+
+
+#### end

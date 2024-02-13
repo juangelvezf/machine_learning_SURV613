@@ -17,8 +17,8 @@ description: >
 We start by first installing some packages that we will need throughout this notebook.
 
 ```{r}
-# install.packages("tidyverse")
-# install.packages("mlbench")
+ install.packages("tidyverse")
+ install.packages("mlbench")
 ```
 
 Besides installing the packages, they also have to be loaded in order to be operational.
