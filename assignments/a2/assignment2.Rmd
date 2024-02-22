@@ -1,0 +1,159 @@
+---
+title: "Assignment 2"
+output: html_notebook
+---
+
+## Setup
+
+```{r results='hide', message=FALSE, warning=FALSE}
+library(glmnet)
+library(caret)
+```
+
+## Data
+
+For this exercise we use the Communities and Crime data from the UCI ML repository, which includes information about communities in the US. "The data combines socio-economic data from the 1990 US Census, law enforcement data from the 1990 US LEMAS survey, and crime data from the 1995 FBI UCR"
+
+Source: https://archive.ics.uci.edu/ml/datasets/Communities+and+Crime
+
+First, some data prep.
+
+```{r}
+crime <- read.csv("communities.data", header = FALSE, na.strings = "?")
+varnames <- read.delim("communities.txt", header = FALSE)
+```
+
+Clean name vector and use as variable names.
+
+```{r}
+varnames <- as.character(varnames$V1)
+varnames <- gsub("@attribute ", "", varnames)
+varnames <- gsub(" numeric", "", varnames)
+varnames <- gsub(" string", "", varnames)
+names(crime) <- varnames
+```
+
+To make things easier, drop columns with missing values.
+
+```{r}
+crime <- crime[, colSums(is.na(crime)) == 0]
+```
+
+Check whats left.
+
+```{r}
+str(crime)
+```
+
+## Train and test set
+
+Next, we want to split the data into a training (75%) and a test (25%) part. This can be done by random sampling with `sample`. Note that there is a `fold` variable in the data set, but here we want to follow our own train/test procedure.
+
+```{r}
+set.seed(3940)
+
+crime_train <-
+crime_test <-
+```
+
+Now, prepare the training data for running regularized regression models via `glmnet`. Our prediction outcome is `ViolentCrimesPerPop`. As X, use all variables except `state`, `communityname`, and `fold`. 
+
+```{r}
+X <-
+
+y <-
+```
+
+Check whether X looks ok.
+
+```{r}
+dim(X)
+```
+
+### Lasso
+
+Estimate a sequence of Lasso models using `glmnet`. You can stick with the defaults for choosing a range of lambdas.
+
+```{r}
+
+```
+
+Here we want to display lambda and the coefficients of the first Lasso model.
+
+```{r}
+
+```
+
+Same for the last Lasso model.
+
+```{r}
+
+```
+
+Now, plot the coefficient paths.
+
+```{r}
+
+```
+
+Next, we need to decide which Lasso model to pick for prediction. Use Cross-Validation for this purpose.
+
+```{r}
+
+```
+
+And plot the Cross-validation results.
+
+```{r}
+
+```
+
+In your own words, briefly describe the CV plot. (1) What is plotted here, (2) what can you infer about the relation between the number of variables and prediction accuracy? 
+
+#### Start text...
+
+#### end
+
+Now, store the lambda value of the model with the smallest CV error as `bestlam1`.
+
+```{r}
+
+```
+
+Create `bestlam2` as the lambda according to the 1-standard error rule.
+
+```{r}
+
+```
+
+### Prediction in test set
+
+Finally, we investigate the performance of our models in the test set. For this task, construct a X matrix from the test set.
+
+```{r}
+Xt <- 
+```
+
+Use the `predict` function to generate predicted values for both models (i.e., both lambdas stored earlier).
+
+```{r}
+
+```
+
+Compute the test MSE of our models.
+
+```{r}
+
+```
+
+In addition, use another performance metric and compute the corresponding values for both models.
+
+```{r}
+
+```
+
+Which model is better? Does it depend on the performance measure that is used?
+
+#### Start text...
+
+#### end
