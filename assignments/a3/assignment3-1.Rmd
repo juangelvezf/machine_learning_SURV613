@@ -14,10 +14,11 @@ library(mlbench)
 library(foreach)
 library(caret)
 library(rpart)
-#library(learnr)
 library(randomForest)
 library(e1071)
 library(class)
+library(xgboost)
+
 ```
 
 ## Data
@@ -54,11 +55,9 @@ boston_test <- BostonHousing2[-train,]
 
 **a) Build a Bagging model using a `foreach` loop. Use the `maxdepth` control option to grow very small trees. These don't have to be stumps, but should not be much larger than a few splits.**
 
-```{r}
-set.seed(123) 
-# Define the control with maxdepth to grow small trees
+```{r} 
 ctrl <- rpart.control(maxdepth = 3) 
-# Bagging model using foreach loop
+# Bagging model using foreach
 predictions <- foreach(m = 1:100, .combine = cbind) %do% {
   index <- sample(1:nrow(boston_train), replace = TRUE)
   train_sample <- boston_train[index, ]
@@ -66,14 +65,13 @@ predictions <- foreach(m = 1:100, .combine = cbind) %do% {
   predict(fit, newdata = boston_test)
 }
 
-# Calculate the mean of the predictions
+# Calculate the mean predictions
 mean_predictions <- rowMeans(predictions)
 
-# Evaluate the model
 actual <- boston_test$medv
 predicted <- mean_predictions
 
-# Using RMSE as the metric for evaluation
+# RMSE
 postResample(predicted, actual)
 ```
 
@@ -162,7 +160,7 @@ The "best" setting for maxdepth depends on the specific characteristics of the d
 
 ```{r}
 
-# Setting 5-fold cross-validation
+# Setting 5-fold
 ctrl <- trainControl(method = "cv",
                      number = 5,
                      savePredictions = "final",
@@ -186,8 +184,7 @@ tuneGrid <- expand.grid(nrounds = c(10, 20),
 **c) Using CV to tune, fit an XGBoost model.**
 
 ```{r}
-library(xgboost)
-# Fitting the XGBoost model
+
 xgbModel <- train(medv ~ .,
                   data = boston_train,
                   method = "xgbTree",
