@@ -14,7 +14,7 @@ library(mlbench)
 library(foreach)
 library(caret)
 library(rpart)
-library(learnr)
+#library(learnr)
 library(randomForest)
 library(e1071)
 library(class)
@@ -55,70 +55,50 @@ boston_test <- BostonHousing2[-train,]
 **a) Build a Bagging model using a `foreach` loop. Use the `maxdepth` control option to grow very small trees. These don't have to be stumps, but should not be much larger than a few splits.**
 
 ```{r}
-?rpart
-y_tbag <- foreach(m = 1:100, .combine = cbind) %do% { 
-  rows <- sample(nrow(boston_train), replace = TRUE)
-  fit <- rpart(medv ~ ., 
-             data = boston_train[rows,],
-             method = "anova", 
-             cp = 0.1, # Encourages a very detailed fit
-             maxcompete = 5, # Large number of competing splits
-             control = rpart.control(maxdepth = 5)) 
+set.seed(123) 
+# Define the control with maxdepth to grow small trees
+ctrl <- rpart.control(maxdepth = 3) 
+# Bagging model using foreach loop
+predictions <- foreach(m = 1:100, .combine = cbind) %do% {
+  index <- sample(1:nrow(boston_train), replace = TRUE)
+  train_sample <- boston_train[index, ]
+  fit <- rpart(medv ~ ., data = train_sample, method = "anova", control = ctrl)
   predict(fit, newdata = boston_test)
 }
 
-dim(y_tbag)
-head(y_tbag[,1:5])
-y_tbag[,1]
+# Calculate the mean of the predictions
+mean_predictions <- rowMeans(predictions)
+
+# Evaluate the model
+actual <- boston_test$medv
+predicted <- mean_predictions
+
+# Using RMSE as the metric for evaluation
+postResample(predicted, actual)
 ```
 
 **b) Plot the last tree of the ensemble to check tree size.**
 
 ```{r}
-ctrl  <- trainControl(method = "cv",
-                      number = 5)
-ncols <- ncol(boston_train)
-mtrys <- expand.grid(mtry = 3:5)
-mtrys
-rf <- train(medv ~ .,
-            data = boston_train,
-            method = "rf",
-            trControl = ctrl,
-            tuneGrid = mtrys)
-plot(rf)
-rf
-plot(rf$finalModel)
+plot(fit, uniform = TRUE)
+text(fit, use.n = TRUE)
 ```
 
 
 **c) Compare the performance of the last tree in the bagging process with the ensemble. That is, look at the performance of the last tree in the loop and compare it with the performance in the overall averaged bagging model.**
 
 ```{r}
-last_tree_predictions <- y_tbag[, 5] # Assuming 5 trees
-actual_values <- boston_test$medv
 
-# Calculate performance metrics for the last tree
-mae_last_tree <- mean(abs(last_tree_predictions - actual_values))
-mse_last_tree <- mean((last_tree_predictions - actual_values)^2)
-
-# Evaluate the Bagging Ensemble
-ensemble_predictions <- rowMeans(y_tbag)
+last_tree_predictions <- predict(fit, newdata = boston_test) # Predictions from the last tree
+last_tree_performance <- postResample(last_tree_predictions, boston_test$medv) # Evaluate the last tree's performance
+#ensemb performance
+ensemble_performance <- postResample(mean_predictions, boston_test$medv)
 
 
-# Calculate performance metrics for the bagging ensemble
-mae_ensemble <- mean(abs(ensemble_predictions - actual_values))
-mse_ensemble <- mean((ensemble_predictions - actual_values)^2)
-
-# Compare the performance
-comparison <- data.frame(
-  Model = c("Last Tree", "Bagging Ensemble"),
-  MAE = c(mae_last_tree, mae_ensemble),
-  MSE = c(mse_last_tree, mse_ensemble)
-)
-
-comparison
+cat("Last Tree RMSE:", last_tree_performance[1], "\n")
+cat("Ensemble RMSE:", ensemble_performance[1], "\n")
 ```
-The MAE is lower for the Bagging Ensemble (2.549430) compared to the Last Tree (3.571486). Similarly, the MSE is lower for the Bagging Ensemble (13.62234) than for the Last Tree (25.39400). This shows that bagging effectively reduces the variance of the prediction errors. 
+The RMSE is lower for the Bagging Ensemble (3.766512) compared to the Last Tree (4.688457). This shows that bagging effectively reduces the variance of the prediction errors. 
 
 ---
 
@@ -127,77 +107,53 @@ The MAE is lower for the Bagging Ensemble (2.549430) compared to the Last Tree (
 **a) In the first loop we've grown small trees. Now, build a new loop and adjust `maxdepth` such that very large trees are grown as individual pieces of the Bagging model.**
 
 ```{r}
-y_tbag2 <- foreach(m = 1:100, .combine = cbind) %do% { 
-  rows <- sample(nrow(boston_train), replace = TRUE)
-  fit <- rpart(medv ~ ., 
-             data = boston_train[rows,],
-             method = "anova", 
-             cp = 0.00001, # Encourages a very detailed fit
-             maxcompete = 100, # Large number of competing splits
-             control = rpart.control(maxdepth = 30)) 
-  predict(fit, newdata = boston_test)
+ctrl2 <- rpart.control(maxdepth = 30) # Example of a large depth, or simply omit this parameter
+
+predictions_large_trees <- foreach(m = 1:100, .combine = cbind) %do% {
+  index <- sample(1:nrow(boston_train), replace = TRUE)
+  train_sample <- boston_train[index, ]
+  fit_large <- rpart(medv ~ ., data = train_sample, method = "anova", control = ctrl2)
+  predict(fit_large, newdata = boston_test)
 }
-dim(y_tbag2)
-head(y_tbag2[,1:5])
-y_tbag2[,1]
+
+mean_predictions_large_trees <- rowMeans(predictions_large_trees)
+predicted_large_trees <- mean_predictions_large_trees
+
+performance_large_trees <- postResample(predicted_large_trees, actual)
+cat("RMSE for Bagging with Large Trees:", performance_large_trees[1], "\n")
+#notice that the RMSE is smaller than the previous Bagging Ensemble
 ```
 
 **b) Confirm that these trees are larger by plotting the last tree.**
 
-```{r}
-ctrl  <- trainControl(method = "cv",
-                      number = 5)
-ncols <- ncol(boston_train)
-mtrys <- expand.grid(mtry = 3:5)
-mtrys
-rf <- train(medv ~ .,
-            data = boston_train,
-            method = "rf",
-            trControl = ctrl,
-            tuneGrid = mtrys)
-plot(rf)
-rf
-plot(rf$finalModel)
+It is bigger compared to the previous one: 
 
+```{r}
+plot(fit_large, uniform = TRUE)
+text(fit_large, use.n = TRUE)
 ```
 
 **c) Show how this ensemble model performs.**
 
 ```{r}
-last_tree_predictions2 <- y_tbag2[, 5] # Assuming 3 trees
-actual_values <- boston_test$medv
-
-# Calculate performance metrics for the last tree
-mae_last_tree <- mean(abs(last_tree_predictions2 - actual_values))
-mse_last_tree <- mean((last_tree_predictions2 - actual_values)^2)
-
-# Evaluate the Bagging Ensemble
-ensemble_predictions <- rowMeans(y_tbag2)
+last_tree_predictions_large <- predict(fit_large, newdata = boston_test) # Predictions from the last tree
+last_tree_performance_large <- postResample(last_tree_predictions_large, boston_test$medv) # Evaluate the last tree's performance
+#ensemb performance
+ensemble_performance_large <- postResample(mean_predictions_large_trees, boston_test$medv)
 
 
-# Calculate performance metrics for the bagging ensemble
-mae_ensemble2 <- mean(abs(ensemble_predictions - actual_values))
-mse_ensemble2 <- mean((ensemble_predictions - actual_values)^2)
-
-# Compare the performance
-comparison2 <- data.frame(
-  Model = c("Last Tree", "Bagging Ensemble"),
-  MAE = c(mae_last_tree, mae_ensemble2),
-  MSE = c(mse_last_tree, mse_ensemble2)
-)
-
-comparison2
+cat("Last Tree RMSE Large:", last_tree_performance_large[1], "\n")
+cat("Ensemble RMSE Large:", ensemble_performance_large[1], "\n")
 ```
 
-The MAE is lower for the Bagging Ensemble (2.481771) compared to the Last Tree (2.865632). Similarly, the MSE is lower for the Bagging Ensemble (13.1263) than for the Last Tree (17.4538). This shows that bagging effectively reduces the variance of the prediction errors. 
+The RMSE is lower for the Bagging Ensemble (3.70823) compared to the Last Tree (5.103384 ). This shows that bagging effectively reduces the variance of the prediction errors. 
 
 
 **d) In summary, which setting of `maxdepth` did you expect to work better? Why?**
 
 
-The "best" setting for maxdepth depends on the specific characteristics of the dataset and the general goals. However, a smaller maxdepth limits the growth of the tree, leading to simpler models that are less likely to overfit the training data but a small tree might not adequately learn the relationships in the data, resulting in underfitting. In this case, where the dataset might be complex and have low noise, a larger maxdepth might work better because it allows the model to capture the complexity.
+The "best" setting for maxdepth depends on the specific characteristics of the dataset and the general goals. However, a smaller maxdepth limits the growth of the tree, leading to simpler models that are less likely to overfit the training data but a small tree might not adequately learn the relationships in the data, resulting in underfitting. In this case, where the dataset might be complex and have low noise, a larger maxdepth might work better because it allows the model to capture the complexity. This can be seen by comparing the RMSE where with large trees where 3.70823 whereas with small trees were 3.766512
 
----
 
 #### 3) Building a Boosting Model with XGBoost
 
@@ -205,15 +161,12 @@ The "best" setting for maxdepth depends on the specific characteristics of the d
 
 
 ```{r}
-library(caret)
-# Setting up trainControl for 5-fold cross-validation
+
+# Setting 5-fold cross-validation
 ctrl <- trainControl(method = "cv",
                      number = 5,
                      savePredictions = "final",
                      verboseIter = TRUE)
-
-
-
 ```
 
 **b) Next, set up the tuning parameters by creating a grid of parameters to try.**
@@ -248,17 +201,49 @@ xgbModel <- train(medv ~ .,
 **d) Compare the performance of the boosting model with the models run previously in this assignment. How does it compare?**
 
 ```{r}
-comparison
-comparison2
+
+cat("Ensemble RMSE Small:", ensemble_performance[1], "\n") #smalltree
+cat("Ensemble RMSE Large:", ensemble_performance_large[1], "\n") #bigtree
+
 
 pred_xgb <- predict(xgbModel, newdata = boston_test)
 results_xgb <- postResample(pred_xgb, boston_test$medv)
 results_xgb
 ```
----
+The results are as follows, suggesting better performance of larger trees than small trees or XGBModels. 
+
+XGB MAE is 4.3971496 
+Baggin with small tree 3.766512
+Bagging with big tree 3.70823
+
+
 
 #### 4) Comparing Models with `caretList`
 
 **a) Use `caretList` to run a Bagging model, a Random Forest model, and an XGBoost model using the same CV splits with 5-fold CV. Plot the performance by RMSE. How do the models compare?**
 
 *Hint: You can use `treebag`, `ranger`, and `xgbTree` for the models.*
+
+```{r}
+library(caret)
+library(caretEnsemble)
+?caretList
+ctrl <- trainControl(method = "cv",
+                     number = 5,
+                     savePredictions = "final",
+                     allowParallel = TRUE)
+
+models <- caretList(medv ~ .,
+                    data = boston_train,
+                    trControl = ctrl,
+                    methodList = c("treebag", "ranger", "xgbTree"))
+
+results <- resamples(models)
+dotplot(results, metric = "RMSE")
+```
+
+Lower average RMSE values indicate better average performance across the cross-validation folds. The lines represent the confidence intervals around the average RMSE (here at a 95% confidence level), indicating the range within which we can be confident that the true mean RMSE lies. 
+
+The xgbTree model appears to be the best performer in terms of both average RMSE and consistency of performance across CV folds.However it seems that is not statistically different from the other two. It is important to also consider other metrics like MAE
+
+
