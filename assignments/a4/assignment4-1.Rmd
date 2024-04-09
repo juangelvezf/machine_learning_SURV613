@@ -1,0 +1,145 @@
+---
+title: 'Assignment 4: Interpretation and Bias Considerations in ML'
+author: "Juan D. Gelvez"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Setup
+
+```{r results='hide', message=FALSE, warning=FALSE}
+library(caret)
+library(randomForest)
+library(partykit)
+library(pdp)
+library(iml)
+```
+
+## Data
+
+Here we use data from the UCI Machine Learning repository on drug consumption. The data contains records for 1885 respondents with personality measurements (e.g. Big-5), level of education, age, gender, country of residence and ethnicity as features. In addition, information on the usage of 18 drugs is included.
+
+Source: https://archive.ics.uci.edu/ml/datasets/Drug+consumption+%28quantified%29
+
+```{r}
+library(mlforsocialscience)
+data(drugs)
+```
+
+---
+
+#### 1) Predicting drug usage
+
+**a) Prepare an outcome variable. For this you can choose from the variables on drug consumption and pick one drug (or a combination of drugs) as the prediction objective. The resulting variable should be of class `factor`, but it can have more than two categories if needed.**
+
+```{r}
+str(drugs) # structure of dataset drugs
+head(drugs)
+#creating cannabis used 
+drugs$Cannabis_Used <- factor(ifelse(drugs$Cannabis == "CL0", "Never Used", "Used")) #creating a binary indicator
+table(drugs$Cannabis_Used)
+drugs$Cannabis_Level <- factor(drugs$Cannabis,
+                               levels = c("CL0", "CL1", "CL2", "CL3", "CL4", "CL5", "CL6"),
+                               ordered = TRUE) # Ensure the Cannabis variable is a factor with ordered levels
+str(drugs$Cannabis_Level) #it's class `factor`
+
+```
+
+**b) Next split the data into a training and a test part.**
+
+```{r}
+set.seed(9574)
+
+inTrain <- createDataPartition(drugs$Cannabis_Used, 
+                               p = 0.8, 
+                               list = FALSE, 
+                               times = 1)
+
+# Creating the training dataset
+drugs_train <- drugs[inTrain,]
+
+# Creating the test dataset
+drugs_test <- drugs[-inTrain,]
+```
+
+**c) Specify the evaluation method for the `train()` function of `caret` with 10-fold cross-validation.**
+
+```{r}
+ctrl <- trainControl(method = "cv", number = 10)
+model <- train(Cannabis_Used ~ ., data = drugs_train, trControl = ctrl)
+model
+```
+
+**d) Specify a grid object for tuning a random forest model.**
+
+```{r}
+tuneGrid <- expand.grid(mtry = c(2, sqrt(ncol(drugs_train)), ncol(drugs_train)/3))
+
+rf_model <- train(Cannabis_Used ~ ., data = drugs_train,
+                 method = "rf", # Random Forest
+                 tuneGrid = tuneGrid,
+                 trControl = trainControl(method = "cv", number = 10)) # 10-fold CV
+```
+
+**e) Use `train()` from `caret` in order to grow the forest. Do not use any of the other drugs as predictors in this model. Determine the best model based on the tuning results.**
+
+```{r}
+predictorVars <- c("Age", "Gender", "Education", "Country", "Ethnicity",
+                   "Neuroticism", "Extraversion", "Openness", "Agreeableness",
+                   "Conscientiousness", "Impulsive", "SS", "Cannabis_Used")
+new_db <- drugs_train[, predictorVars]
+
+
+
+trainCtrl <- trainControl(method = "cv", number = 15)
+tuneGridRF <- expand.grid(mtry = c(2, sqrt(ncol(new_db)-1), (ncol(new_db)-1)/3))
+rfModel <- train(Cannabis_Used ~ ., data = new_db,
+                 method = "rf", # specifies random forest
+                 trControl = trainCtrl,
+                 tuneGrid = tuneGridRF)
+
+```
+
+---
+
+#### 2) Interpreting the model
+
+**a) Find and create a plot of the variable importances. What are you interpretations of this?**
+
+**b) Create some partial dependence plots. What are your interpretations of these plots?**
+
+```{r}
+
+```
+
+**c) Create some ICE plots. What are your interpretations of these plots?**
+
+```{r}
+
+```
+
+**d) What are some possible actions that can be taken using the results of these interpretations?**
+
+---
+
+#### 3) Prediction and Bias
+
+**a) Use `predict()` in order to predict class membership and probabilities in the test set.**
+
+```{r}
+
+```
+
+**b) Evaluate prediction performance based on two or three measures.**
+
+```{r}
+
+```
+
+**c) Look at the differences in performance metrics by gender. Are there any possible biases in the predictions?**
+
+```{r}
+
+```
+
