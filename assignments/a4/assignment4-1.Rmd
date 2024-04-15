@@ -106,20 +106,51 @@ rfModel <- train(Cannabis_Used ~ ., data = new_db,
 #### 2) Interpreting the model
 
 **a) Find and create a plot of the variable importances. What are you interpretations of this?**
+```{r}
+varImpPlot(rfModel$finalModel, main="Variable Importance")
+```
+In the previous graph each dot represents a predictor variable, and the x-axis indicates the mean decrease in Gini impurity when that variable is used for splitting in the model. Variable Openness and SS seem to have the largest Mean Decrease Gini. These suggest that both are highly predictive of cannabis usage among the variables considered.
 
 **b) Create some partial dependence plots. What are your interpretations of these plots?**
 
 ```{r}
+# partial dependence plot for 'Openness' and 'SS'
+pdp_openness <- partial(rfModel, pred.var = "Openness", train = new_db, grid.resolution = 10)
+plot(pdp_openness, main = "Partial Dependence Plot for Openness", xlab = "Openness", ylab = "Partial Dependence")
 
+pdp_ss <- partial(rfModel, pred.var = "SS", train = new_db, grid.resolution = 10)
+plot(pdp_ss, main = "Partial Dependence Plot for SS", xlab = "SS", ylab = "Partial Dependence")
 ```
+
+The partial dependence plot for Openness and SS show the relationship between the predictor variables and the predicted outcome after averaging out the effects of the other variables in the model. For both graphs, the axis represents the range of values for the 'Openness' and SS personality trait, likely standardized (as indicated by the negative and positive values around 0). 
+
+Both plots seem to have a slight U-shape, indicating that individuals with average levels of 'Openness' and SS (around the 0 value) are associated with a lower predicted probability of the cannabis consumption compared to those with lower or higher levels of 'Openness' or SS -specially lower-. However, the U-shape is not very pronounced and the relathionship seem negative in both cases. 
 
 **c) Create some ICE plots. What are your interpretations of these plots?**
 
 ```{r}
+#ice age
+ice_age <- partial(rfModel, pred.var = "Age", 
+                type = "classification",  prob = T, 
+                ice = TRUE, center = T)
+plotPartial(ice_age, rug = T, train = new_db, alpha = 0.1)
+
+#ice education
+ice_edu <- partial(rfModel, pred.var = "Education", 
+                type = "classification",  prob = T, 
+                ice = TRUE, center = T)
+plotPartial(ice_edu, rug = T, train = new_db, alpha = 0.1)
+
+
 
 ```
+The ICE plot for the 'Age' variable shows a collection of individual lines, each representing the change in predicted probability of the use of cannabis as 'Age' varies for each observation. The red line represents the average prediction across all individuals for different ages. In other words, this is the average effect of 'Age' on the prediction after accounting for the other variables, and the trend is positive so there's a positive correlation between these two. The second ICE plot is different, the relationship between education and cannabis used seems to be flat (no relationship at all)
+
 
 **d) What are some possible actions that can be taken using the results of these interpretations?**
+
+It seems education is not related to cannabis used, but age is; also low levels of Openness and SS is more correlated to cannabis used. Therefore, possible actions would be to interact with young people that have low levels of openness and SS in order to avoid problematic consumption of cannabis. 
+
 
 ---
 
@@ -128,18 +159,73 @@ rfModel <- train(Cannabis_Used ~ ., data = new_db,
 **a) Use `predict()` in order to predict class membership and probabilities in the test set.**
 
 ```{r}
+# Predicting class membership
+predicted_classes <- predict(rfModel, newdata = drugs_test, type = "raw") # type = "raw" option returns the predicted class for each instance in the test dataset.
+predicted_probabilities <- predict(rfModel, newdata = drugs_test, type = "prob") #type = "prob" option returns the predicted probabilities for each class for each instance in the test dataset
 
+head(predicted_classes)
+head(predicted_probabilities)
 ```
 
 **b) Evaluate prediction performance based on two or three measures.**
 
 ```{r}
+# Accuracy
+accuracy <- sum(predicted_classes == drugs_test$Cannabis_Used) / nrow(drugs_test)
+accuracy
+
+# Create a confusion matrix
+confusion <- confusionMatrix(predicted_classes, drugs_test$Cannabis_Used)
+print(confusion)
+
+# Extracting precision, recall, and F1-Score
+precision <- confusion$byClass['Precision']
+print(paste("Precision:", precision))
+
+recall <- confusion$byClass['Recall']
+print(paste("Recall:", recall))
+
+F1_score <- 2 * (precision * recall) / (precision + recall)
+print(paste("F1 Score:", F1_score))
 
 ```
+There is a strong overall accuracy rate, indicating that your model correctly predicted the cannabis usage status (either "Used" or "Never Used") for about 82.45% of the test set. 
+
+Precision for the "Never Used" class is moderate (66%)
+
+Recall is quite low for the "Never Used" category, suggesting that the model only correctly identifies about 39.02% of all true "Never Used" cases. 
+
+The F1 score, which balances precision and recall, is below 50%. This lower value indicates that the model is not very effective at predicting "Never Used" when both false positives and false negatives are considered.
+
+For the xonfusion matrix:
+True Negatives (TN): 278 (predicted as "Used", actually "Used")
+False Positives (FP): 16 (predicted as "Never Used", actually "Used")
+False Negatives (FN): 50 (predicted as "Used", actually "Never Used")
+True Positives (TP): 32 (predicted as "Never Used", actually "Never Used")
+
+The model demonstrates strong overall accuracy, specificity, and negative predictive value, particularly in identifying users of cannabis. However, it struggles significantly with the recall for the "Never Used" class, indicating a potential area for improvement. The precision for "Never Used" is moderate, and the low F1 score for this class suggests that improvements could be made in either or both precision and recall to better balance the model's performance.
 
 **c) Look at the differences in performance metrics by gender. Are there any possible biases in the predictions?**
 
 ```{r}
+library(mlforsocialscience)
+data(drugs) #there is a problem in the dataset because gender is a value, so I'll assume positive values is male
+# Subset the test data by gender
+drugs_test_male <- drugs_test[drugs_test$Gender == 0.48246,]
+drugs_test_female <- drugs_test[drugs_test$Gender == -0.48246,]
 
+# Predict for each subset
+predicted_classes_male <- predict(rfModel, newdata = drugs_test_male, type = "raw")
+predicted_classes_female <- predict(rfModel, newdata = drugs_test_female, type = "raw")
+
+# Confusion matrices for each gender
+confusion_male <- confusionMatrix(predicted_classes_male, drugs_test_male$Cannabis_Used)
+confusion_female <- confusionMatrix(predicted_classes_female, drugs_test_female$Cannabis_Used)
+
+print("Confusion Matrix for Males:")
+print(confusion_male)
+print("Confusion Matrix for Females:")
+print(confusion_female)
 ```
+The model shows a potential bias toward predicting outcomes for males more accurately and reliably than for females, particularly in terms of recall and F1 score. Females have a higher overall accuracy largely due to a higher specificity (98.101%), which means the model is very good at identifying females who "Used" but not as good at correctly identifying those who "Never Used."
 
