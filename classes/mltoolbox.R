@@ -24,9 +24,9 @@ head(titanic)
 
 # Train-test split
 set.seed(3225)
-inTrain <- createDataPartition(titanic$Survived, 
-                               p = .8, 
-                               list = FALSE, 
+inTrain <- createDataPartition(titanic$Survived,
+                               p = .8,
+                               list = FALSE,
                                times = 1)
 titanic_train <- titanic[inTrain,]
 titanic_test <- titanic[-inTrain,]
@@ -113,7 +113,7 @@ sl <- SuperLearner(Y = y_train, X = X_train, family = binomial(),
 sl
 # Risk is error rate of model
 
-# Nested CV to get estimates of the error of individual models as well as 
+# Nested CV to get estimates of the error of individual models as well as
 # the Super Learner
 cv_sl <- CV.SuperLearner(Y = y_train, X = X_train, family = binomial(), V = 5,
                          SL.library = c("SL.mean", "SL.glmnet", "SL.ranger"))
@@ -135,10 +135,10 @@ rf_s_roc <- roc(titanic_test$Survived, p_rf_s$X1)
 ens_roc <- roc(titanic_test$Survived, p_ens)
 sl_roc <- roc(titanic_test$Survived, p_sl$pred[, 1])
 
-ggroc(list(RF = rf_roc, 
-           RF_SMOTE = rf_s_roc, 
+ggroc(list(RF = rf_roc,
+           RF_SMOTE = rf_s_roc,
            Caret_Stack = ens_roc,
            SuperLearner = sl_roc)) +
-  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), 
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1),
                color="darkgrey", linetype="dashed")
 
